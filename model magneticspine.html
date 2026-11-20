@@ -1,0 +1,365 @@
+<html>
+
+<head>
+    <title>model magneticspineandloops</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: monospace;
+            font-size: 10px;
+
+            background-color: #050505;
+            color: #fff;
+        }
+
+        #thescene {}
+
+        canvas,
+        canvas:focus {
+            outline: none;
+            border: none;
+        }
+    </style>
+    <script src="./analytics.js"></script>
+</head>
+
+<body>
+    <div id="thescene"></div>
+
+    <script src="./js_three.min.js"></script>
+    <script src="./js_threeorbitcontrols.js"></script>
+
+    <script src="./lib.js"></script>
+
+    <!-- SCENE SETUP -->
+    <script>
+        var scene;
+        var camera;
+        var renderer;
+        var controls;
+
+        function setup() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+
+            camera = new THREE.PerspectiveCamera(
+                10, // 35
+                window.innerWidth / window.innerHeight,
+
+                // 0.1 * 10 ** -11,
+                // 1000 * 10 ** -11
+
+                // 0.1 * 10 ** -54,
+                // 1000 * 10 ** -54
+
+                // simple for now.
+                .1,
+                1000
+
+                // 0.1 * voxelsize,
+                // 1000 * voxelsize
+            );
+
+            // camera.position.set(0, 0, 6 * BOHR_X);
+            // camera.position.set(25, 25, 25);
+            camera.position.set(0, 0, 25);
+            // camera.position.set(0, 0, 200);
+            // const camera_pos = 130;
+            // camera.position.set(camera_pos * voxelsize, camera_pos * voxelsize, camera_pos * voxelsize);
+            camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // optional
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            // controls.autoRotate = true;
+            // controls.autoRotateSpeed = 0.1;
+
+            // call controls.update() after a manual change to the camera
+            controls.update();
+
+            document.querySelector("#thescene").appendChild(renderer.domElement);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        setup();
+    </script>
+
+    <!-- RUN VIZ -->
+    <script>
+        const ncirc = 20;
+        const npointspercirc = 20;
+        const xaxis = new THREE.Vector3(1, 0, 0);
+        const yaxis = new THREE.Vector3(0, 1, 0);
+        const zaxis = new THREE.Vector3(0, 0, 1);
+        function makeV2spineandloops(argshiftx = 0, argdraw = true, argflipy = false, argtoplusx = false, argtominusx = false, argtoz = false) {
+            var arr_obj = [];
+
+            for (var i = 0; i < ncirc; i++) {
+                var circlei = getpointsoncircle(npointspercirc);
+                var angle = (i / ncirc) * 2 * Math.PI;
+
+                var j0point;
+                for (var j = 0; j < npointspercirc; j++) {
+                    let locp = circlei[j];
+                    let locvec = (new vec(-locp.y, locp.x)).multiplyScalar(.1);
+
+                    locp.applyAxisAngle(yaxis, angle);
+                    locvec.applyAxisAngle(yaxis, angle);
+
+                    if (j === 0) {
+                        j0point = locp.clone();
+                    }
+
+                    locp.sub(j0point);
+
+                    if (argflipy) {
+                        locp.y *= -1;
+                        locvec.y *= -1;
+                    }
+                    if (argtoplusx) {
+                        locp.applyAxisAngle(zaxis, -Math.PI / 2);
+                        locvec.applyAxisAngle(zaxis, -Math.PI / 2);
+                    } else if (argtominusx) {
+                        locp.applyAxisAngle(zaxis, Math.PI / 2);
+                        locvec.applyAxisAngle(zaxis, Math.PI / 2);
+                    }
+                    if (argtoz) {
+                        locp.applyAxisAngle(xaxis, Math.PI / 2);
+                        locvec.applyAxisAngle(xaxis, Math.PI / 2);
+                    }
+
+                    locp.x += argshiftx;
+
+                    if (argdraw) {
+                        plotpoint(locp);
+                        plotlinesegment(locvec, locp);
+                    }
+                    arr_obj.push({ keyp: locp, keyvec: locvec });
+                }
+            }
+
+            return arr_obj;
+        }
+
+        var steps = 0;
+        var stepsmax = 0;
+
+        function logic_pre() {
+            // vectorgroupwithgrid2vectorsgoingupfromspine
+            //   the mag part of electronglobe, north at +y
+
+            // {p point, vec vector}
+            var arr_obj1 = makeV2spineandloops();
+
+            camera.position.set(0, 0, 100);
+
+            controls.target.set(6, 0, 0); // better than .lookAt
+
+
+            // TEST1 with one pointvector
+            /*
+            var testpointvectors = [
+                { keyp: new p(3, 0, 0), keyvec: new vec(.3, 0, 0) },
+                { keyp: new p(6, 0, 0), keyvec: new vec(.3, 0, 0) },
+                { keyp: new p(9, 0, 0), keyvec: new vec(.3, 0, 0) },
+                { keyp: new p(12, 0, 0), keyvec: new vec(.3, 0, 0) },
+                { keyp: new p(15, 0, 0), keyvec: new vec(.3, 0, 0) },
+
+
+                { keyp: new p(3, 0, 0), keyvec: new vec(0, .3, 0) },
+                { keyp: new p(6, 0, 0), keyvec: new vec(0, .3, 0) },
+                { keyp: new p(9, 0, 0), keyvec: new vec(0, .3, 0) },
+                { keyp: new p(12, 0, 0), keyvec: new vec(0, .3, 0) },
+                { keyp: new p(15, 0, 0), keyvec: new vec(0, .3, 0) },
+
+
+
+                { keyp: new p(3, 0, 0), keyvec: new vec(0, 0, .3) },
+                { keyp: new p(6, 0, 0), keyvec: new vec(0, 0, .3) },
+                { keyp: new p(9, 0, 0), keyvec: new vec(0, 0, .3) },
+                { keyp: new p(12, 0, 0), keyvec: new vec(0, 0, .3) },
+                { keyp: new p(15, 0, 0), keyvec: new vec(0, 0, .3) },
+
+            ];
+
+            for (var k = 0; k < testpointvectors.length; k++) {
+                var pv = testpointvectors[k];
+                plotpoint(pv.keyp);
+                plotlinesegment(pv.keyvec, pv.keyp);
+
+                var total = 0;
+                for (var ij = 0; ij < arr_obj1.length; ij++) {
+                    var dot = arr_obj1[ij].keyvec.dot(pv.keyvec);
+                    var dist = arr_obj1[ij].keyp.distanceTo(pv.keyp);
+                    // total += dot / dist;
+                    total += dot * dist;
+                }
+                console.log('total', pv.keyp, pv.keyvec, trim(total));
+                // console.log('avg', trim(total / arr_obj1.length));
+            }
+            */
+
+            // CONCLUSION1
+            // formula dot/dist
+            //   for x,z, val is not normal, strength sometimes gets smaller and changes sign. never mind. that is floating point noise.
+            //      good. not aligned with spine, so formula output should be 0 for all the r.
+            //   for y, smaller val with distance. expected.
+            //       bestfit w 1/radius as the x
+            //         https://www.wolframalpha.com/input?i=best+fit+%281%2F3%2C+-0.12268%29%2C+%281%2F6%2C+-0.014222%29%2C+%281%2F9%2C+-0.0041586%29%2C+%281%2F12%2C+-0.0017463%29%2C+%281%2F15%2C+-0.00089224%29
+            //        result like 1/r^2
+            // formula dot*dist
+            //    for x,z. near 0 for all the r.
+            //    for y
+            //        bestfit w 1/radius as the x
+            //          https://www.wolframalpha.com/input?i=linear+fit+%281%2F3%2C+-1.0418%29%2C+%281%2F6%2C+-0.50488%29%2C+%281%2F9%2C+-0.33476%29%2C+%281%2F12%2C+-0.2506%29%2C+%281%2F15%2C+-0.20031%29
+            //           result like 1/r.
+
+
+
+
+            // TEST2 with another V2spineandloops
+            // var arr_obj2 = makeV2spineandloops(6);
+            // var arr_obj2 = makeV2spineandloops(6, true, true);
+            // var arr_obj2 = makeV2spineandloops(6, true, false, false, false, true);
+            var testobj2s = [
+                makeV2spineandloops(6, false),
+                makeV2spineandloops(9, false),
+                makeV2spineandloops(12, false),
+                makeV2spineandloops(15, false),
+
+                // flipy
+                makeV2spineandloops(6, false, true),
+                makeV2spineandloops(9, false, true),
+                makeV2spineandloops(12, false, true),
+                makeV2spineandloops(15, false, true),
+
+                // toplusx
+                makeV2spineandloops(6, false, false, true),
+                makeV2spineandloops(9, false, false, true),
+                makeV2spineandloops(12, false, false, true),
+                makeV2spineandloops(15, false, false, true),
+
+                // tominusx
+                makeV2spineandloops(6, false, false, false, true),
+                makeV2spineandloops(9, false, false, false, true),
+                makeV2spineandloops(12, false, false, false, true),
+                makeV2spineandloops(15, false, false, false, true),
+
+                // toz
+                makeV2spineandloops(6, false, false, false, false, true),
+                makeV2spineandloops(9, false, false, false, false, true),
+                makeV2spineandloops(12, false, false, false, false, true),
+                makeV2spineandloops(15, false, false, false, false, true),
+            ];
+
+            for (var k = 0; k < testobj2s.length; k++) {
+                var testobj2 = testobj2s[k];
+
+                if (k % 4 === 0) {
+                    console.log('--');
+                }
+
+                // ij2 for testobj2, and ij1 for obj1
+                var totals = []; // store total for every pointvector on testobj2
+                for (var ij2 = 0; ij2 < testobj2.length; ij2++) {
+                    var pv = testobj2[ij2];
+
+                    var total = 0;
+                    for (var ij1 = 0; ij1 < arr_obj1.length; ij1++) {
+                        var dot = arr_obj1[ij1].keyvec.dot(pv.keyvec);
+                        var dist = arr_obj1[ij1].keyp.distanceTo(pv.keyp);
+                        // total += dot / dist;
+                        total += dot * dist;
+                    }
+                    totals.push(total);
+
+                }
+                var totals_sum = totals.reduce((acc, curr) => acc + curr, 0);
+                // console.log(totals);
+                console.log(trim(totals_sum));
+                // var avgs = totals.map(t => t / n);
+                // var avgs_sum = avgs.reduce((acc, curr) => acc + curr, 0);
+                // console.log(trim(avgs_sum));
+            }
+
+            // CONCLUSION2
+            // formula dot/dist
+            //   samerot, flipy, toplusx, tominusx, toz
+            //     all, with incr r, the total val ~0
+            // formual dot*dist
+            //   samerot
+            //     with incr r, the total val positive and gets smaller
+            //     best fit 1 1/radius as the x
+            //         https://www.wolframalpha.com/input?i=best+fit+%281%2F6%2C+0.97196%29%2C+%281%2F9%2C+0.28021%29%2C+%281%2F12%2C+0.11712%29%2C+%281%2F15%2C+0.059708%29
+            //         result like 1/r^2. good. expected ergy, so that force is like 1/r^3, expected for dipole.
+            //   flipy
+            //     with incr r, the total val negative and and gets smaller
+            //   toplusx
+            //     with incr r, the total val ~0
+            //   tominusx
+            //     with incr r, the total val ~0
+            //   toz
+            //     with incr r, the total val ~0
+            // good.
+
+        }
+
+        function logic_post() {
+            console.log('');
+        }
+
+        // finished. steps === stepsmax. render stays on.
+        function run_post() {
+            controls.update();
+
+            requestAnimationFrame(run_post);
+            renderer.render(scene, camera);
+        }
+
+        // const stepsuntilplot = 20;
+        const stepsuntilplot = 1;
+        // const stepsuntilrender = 200;
+        const stepsuntilrender = 1;
+        async function run() {
+            // for (var i = 0; i < stepsuntilrender && steps < stepsmax; i++) {
+            //     logic_step(); // can change stepsmax to terminate early
+            //     steps++;
+            // }
+
+            // >= not just ===, because stepsuntilrender*ninteger might be > stepsmax
+            if (steps >= stepsmax) {
+                // render everything remaining
+                // avoids hiccup where renders plots then renders few more points.
+                renderer.render(scene, camera);
+                // give DOM short break to update page.
+                await new Promise(r => setTimeout(r, 0));
+                // turn on autorotate
+                controls.autoRotate = true;
+                controls.autoRotateSpeed = 0.1;
+                logic_post();
+                return run_post();
+            }
+
+            controls.update();
+            requestAnimationFrame(run);
+            renderer.render(scene, camera);
+
+            // clearscene();
+        }
+        logic_pre();
+        run();
+    </script>
+
+</body>
+
+</html>

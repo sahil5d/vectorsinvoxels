@@ -1,0 +1,278 @@
+<html>
+
+<head>
+    <title>model electronglobe</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: monospace;
+            font-size: 10px;
+
+            background-color: #050505;
+            color: #fff;
+        }
+
+        #thescene {}
+
+        canvas,
+        canvas:focus {
+            outline: none;
+            border: none;
+        }
+    </style>
+    <script src="./analytics.js"></script>
+</head>
+
+<body>
+    <div id="thescene"></div>
+
+    <script src="./js_three.min.js"></script>
+    <script src="./js_threeorbitcontrols.js"></script>
+
+    <script src="./lib.js"></script>
+
+    <!-- SCENE SETUP -->
+    <script>
+        var scene;
+        var camera;
+        var renderer;
+        var controls;
+
+        function setup() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+
+            camera = new THREE.PerspectiveCamera(
+                10, // 35
+                window.innerWidth / window.innerHeight,
+
+                // 0.1 * 10 ** -11,
+                // 1000 * 10 ** -11
+
+                // 0.1 * 10 ** -54,
+                // 1000 * 10 ** -54
+
+                // simple for now.
+                .1,
+                1000
+
+                // 0.1 * voxelsize,
+                // 1000 * voxelsize
+            );
+
+            // camera.position.set(0, 0, 6 * BOHR_X);
+            // camera.position.set(25, 25, 25);
+            // camera.position.set(0, 0, 25);
+            camera.position.set(0, 0, 200);
+            // const camera_pos = 130;
+            // camera.position.set(camera_pos * voxelsize, camera_pos * voxelsize, camera_pos * voxelsize);
+            camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // optional
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            // controls.autoRotate = true;
+            // controls.autoRotateSpeed = 0.1;
+
+            // call controls.update() after a manual change to the camera
+            controls.update();
+
+            document.querySelector("#thescene").appendChild(renderer.domElement);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        setup();
+    </script>
+
+    <!-- RUN VIZ -->
+    <script>
+        var steps = 0;
+        var stepsmax = 0;
+
+        function logic_pre() {
+            /*
+            var arr = getapproxequidistantpointsonsphere(5000, 3);
+            for (let i = 0; i < arr.length; i++) {
+                plotpoint(arr[i]);
+            }
+            plotpoint(new p(0, 0, 0), 'blue', 2.9);
+            */
+
+
+            // vectorspherewithgrid1vectorstocenter, an electronmaybe
+            var n = 400;
+            var arr_obj1 = []; // {p point, vec vector}
+
+            // note: doing points on a sphere, not random in sphere (let p = getrandompointinsphere(1);), bc with random points, even high n, the resulting 'total' is not consistent.
+            var pointsonsphere = getapproxequidistantpointsonsphere(n, 1);
+            for (var i = 0; i < n; i++) {
+                let locp = pointsonsphere[i];
+                let locvec = locp.clone().normalize().multiplyScalar(-.3);
+                // let locvec = locp.clone().normalize().multiplyScalar(.3); // try vectorspherewithgrid1vectorsawayfromcenter, a positron
+
+                // locp.x -= 20;
+                locp.x -= 10;
+
+                plotpoint(locp);
+                plotlinesegment(locvec, locp);
+                arr_obj1.push({ keyp: locp, keyvec: locvec });
+            }
+
+            // TEST1 with one pointvector
+            // a thing that is a point and a vector
+            // a "localized vector", "bound vector", "pointvector"
+            // var pointvector1 = { keyp: new p(20, 0, 0), keyvec: new vec(.3, 0, 0) };
+            var pointvector1 = { keyp: new p(10, 0, 0), keyvec: new vec(.3, 0, 0) };
+            // var pointvector1 = { keyp: new p(20, 0, 0), keyvec: new vec(0, .3, 0) }; // smaller dotdist sums when pointvector1 is vertical.
+            /*
+            plotpoint(pointvector1.keyp);
+            plotlinesegment(pointvector1.keyvec, pointvector1.keyp);
+
+            var total = 0;
+            for (var i = 0; i < arr_obj1.length; i++) {
+                var dot = arr_obj1[i].keyvec.dot(pointvector1.keyvec);
+                var dist = arr_obj1[i].keyp.distanceTo(pointvector1.keyp);
+                total += dot / dist;
+            }
+            console.log('total', trim(total));
+            console.log('avg', trim(total / n));
+            */
+            // CONCLUSION1
+            // stable total
+            // when flip obj1's pointvector vector dir, result is the value * -1. good.
+            //     and note the obj1's pointvector points have to be on sphere.
+            //     can't be at spherecenter, otherwise no diff when doing the sum of dotproducts
+            // with total += dot / dist;
+            //     horizontal pointvector1
+            //       bestfit w 1/radius as the x
+            //         https://www.wolframalpha.com/input?i=best+fit+%281%2F10%2C+-0.11968%29%2C+%281%2F20%2C+-0.029916%29%2C+%281%2F30%2C+-0.013294%29%2C+%281%2F40%2C+-0.0074771%29
+            //        result is like 1/r^2
+            //     vertical pointvector1
+            //       bestfit w 1/radius as the x
+            //         https://www.wolframalpha.com/input?i=best+fit+%281%2F40%2C+0.0000044683%29%2C+%281%2F30%2C+0.00000794%29%2C+%281%2F20%2C+0.000017838%29%2C+%281%2F10%2C+0.000070676%29
+            //        result like 1/r^2
+            // with total += dot * dist
+            //     the totals are constant for all r. interesting.
+            //     and whether pointvector is horizontal or vertical or tilted. why?
+            // CONCLUSION1B
+            //    formula dot/dist results in decr w distance
+            //    formula dot*dist results in constant w distance
+
+
+            // TEST2 with another electronglobe
+            // vectorspherewithgrid1vectorstocenter
+            var arr_obj2 = [];
+            var pointsonsphere2 = getapproxequidistantpointsonsphere(n, 1);
+            for (var j = 0; j < n; j++) {
+                let locp = pointsonsphere2[j];
+                let locvec = locp.clone().normalize().multiplyScalar(-.3);
+
+                // locp.x += 20;
+                locp.x += 10;
+
+                plotpoint(locp);
+                plotlinesegment(locvec, locp);
+                arr_obj2.push({ keyp: locp, keyvec: locvec });
+            }
+
+            var totals = []; // store total for every pointvector on obj2
+            for (var j = 0; j < arr_obj2.length; j++) {
+                var total = 0;
+                for (var i = 0; i < arr_obj1.length; i++) {
+                    var dot = arr_obj1[i].keyvec.dot(arr_obj2[j].keyvec);
+                    var dist = arr_obj1[i].keyp.distanceTo(arr_obj2[j].keyp);
+                    // total += dot / dist;
+                    total += dot * dist;
+                }
+                totals.push(total);
+            }
+            var totals_sum = totals.reduce((acc, curr) => acc + curr, 0);
+            // console.log(totals);
+            // console.log(trim(totals_sum));
+            var avgs = totals.map(t => t / n);
+            var avgs_sum = avgs.reduce((acc, curr) => acc + curr, 0);
+            console.log(trim(avgs_sum));
+            // CONCLUSION2
+            // surprising that when the hairs (the vectors) are both pointing inward, the sum of the dot products is positive. guessed it would be negative, because the right side of the left sphere and the left side of the right sphere are the closest, so their dot product which is negative would be dominant.
+            //     GPT answer: look at components. yes the x component sum is negative, but y and z positive
+            // problem. seems that like objects will attract? and opp objects will repel? or fine, use the value as is, as a positive energy. like kqq/r for electron-and-electron is positive. so if the sumofdotproducts is positive, it's like positive energy.
+            // the avg itself drops off as 1/r^3, not 1/r, hmm.
+            // CONCLUSION3
+            // wow insight from GPT. have the formula as dot*dist, and then the avg drops off as 1/r.
+            //    with this formula, when electron-electron, avg is negative.
+            // potential future variation projection1*projection2 * dist
+            //      let r_hat = arr_obj2[j].keyp.clone().sub(arr_obj1[i].keyp).normalize();
+            //      let proj1 = arr_obj1[i].keyvec.dot(r_hat);
+            //      let proj2 = arr_obj2[j].keyvec.dot(r_hat);
+            //      total += -(proj1 * proj2 * dist);
+            // CONCLUSION3b
+            // how is the decr possible when conclusion1b showed constant w distance? it is bc when shift sphere2 right, [each vec of sphere2 that isn't on the xaxis] has a diff angle wrt to the r to sphere1.
+            //    so it's not quite the same as simple case of 1 pointvector any tilt and sliding that pointvector along the r to sphere1.
+            //    diff between sliding pointvector solo and sliding pointvectorwhenattachedtosphere2center.
+            // CONCLUSION3c
+            // ultimate ergy fx will need to consider sphere-to-sphere interaction and not just pointvector-to-sphere interaction.
+
+            // CONCLUSION4
+            // the sum of dot*dist is additive per voxel and no voxel interferes with other voxel, so can calc that total for any vectorspheres nearby, and can add it to assume c (3e8 m/s) is based on all other mass (vectorspheres) in the cosmos?
+
+        }
+
+        function logic_post() {
+            console.log('');
+        }
+
+        // finished. steps === stepsmax. render stays on.
+        function run_post() {
+            controls.update();
+
+            requestAnimationFrame(run_post);
+            renderer.render(scene, camera);
+        }
+
+        // const stepsuntilplot = 20;
+        const stepsuntilplot = 1;
+        // const stepsuntilrender = 200;
+        const stepsuntilrender = 1;
+        async function run() {
+            // for (var i = 0; i < stepsuntilrender && steps < stepsmax; i++) {
+            //     logic_step(); // can change stepsmax to terminate early
+            //     steps++;
+            // }
+
+            // >= not just ===, because stepsuntilrender*ninteger might be > stepsmax
+            if (steps >= stepsmax) {
+                // render everything remaining
+                // avoids hiccup where renders plots then renders few more points.
+                renderer.render(scene, camera);
+                // give DOM short break to update page.
+                await new Promise(r => setTimeout(r, 0));
+                // turn on autorotate
+                controls.autoRotate = true;
+                controls.autoRotateSpeed = 0.1;
+                logic_post();
+                return run_post();
+            }
+
+            controls.update();
+            requestAnimationFrame(run);
+            renderer.render(scene, camera);
+
+            // clearscene();
+        }
+        logic_pre();
+        run();
+    </script>
+
+</body>
+
+</html>

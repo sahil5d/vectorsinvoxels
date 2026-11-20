@@ -1,0 +1,253 @@
+<html>
+
+<head>
+    <title>vectors in voxels</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: monospace;
+            font-size: 10px;
+
+            background-color: #050505;
+            color: #fff;
+        }
+
+        #thescene {}
+
+        canvas,
+        canvas:focus {
+            outline: none;
+            border: none;
+        }
+
+        #theinfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+    </style>
+    <script src="./analytics.js"></script>
+
+</head>
+
+<body>
+    <div id="thescene"></div>
+
+    <div id="theinfo">
+        <b>Vectors in Voxels</b><br>
+        • Drag to rotate | Scroll to zoom<br>
+        <!-- • <b>[R]</b> Reset Pulse<br> -->
+        • <b>[Space]</b> Pause / Play<br>
+        • <b>[S]</b> Single Step<br>
+        <hr style="border: 0; border-top: 1px solid #444; margin: 6px 0;">
+        <div id="stats-display" style="font-family: monospace; font-size: 11px; color: #aaa;">
+            Step: <span id="stat-step">0</span><br>
+            Z-Pos: <span id="stat-zpos">--</span> vox<br>
+            Pulse Radius Wr: <span id="stat-radius" style="font-weight: bold;">--</span> vox<br>
+            Peak Intensity: <span id="stat-intensity">--</span><br>
+            Ergy: <span id="stat-ergy">--</span> J<br>
+            Pz: <span id="stat-pz">--</span> kg·m/s
+        </div>
+    </div>
+
+    <script src="./js_three.min.js"></script>
+    <script src="./js_threeorbitcontrols.js"></script>
+
+    <script src="./constants.js"></script>
+    <script src="./draw.js"></script>
+    <script src="./lib.js"></script>
+    <script src="./initpulsefxs.js"></script>
+    <script src="./logic.js"></script>
+
+    <!-- SCENE SETUP -->
+    <script>
+        var scene;
+        var camera;
+        var renderer;
+        var controls;
+
+        function setup() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+
+            camera = new THREE.PerspectiveCamera(
+                10, // 35
+                window.innerWidth / window.innerHeight,
+
+                // 0.1 * 10 ** -11,
+                // 1000 * 10 ** -11
+
+                // 0.1 * 10 ** -54,
+                // 1000 * 10 ** -54
+
+                // simple for now.
+                // .1,
+                // 1000
+
+                0.1 * voxelsize,
+                1000 * voxelsize
+            );
+
+            const centerX = 0.5 * N * voxelsize;
+            const centerY = 0.5 * N * voxelsize;
+            const centerZ = 0.5 * Nz * voxelsize;
+
+            camera.position.set(
+                centerX + 350 * voxelsize,
+                centerY + 100 * voxelsize,
+                centerZ + 350 * voxelsize
+            );
+
+            // camera.position.set(0, 0, 6 * BOHR_X);
+            // camera.position.set(25, 25, 25);
+            // const camera_pos = 130;
+            // camera.position.set(camera_pos * voxelsize, camera_pos * voxelsize, camera_pos * voxelsize);
+            // camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // optional
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            // controls.autoRotate = true;
+            // controls.autoRotateSpeed = 0.1;
+
+            controls.target.set(centerX, centerY, centerZ);
+            // call controls.update() after a manual change to the camera
+            controls.update();
+
+            document.querySelector("#thescene").appendChild(renderer.domElement);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        setup();
+    </script>
+
+    <!-- RUN VIZ -->
+    <script>
+        var steps = 0;
+        var stepsmax = 800;
+        var isPaused = false;
+
+        const statStepEl = document.getElementById('stat-step');
+        const statZposEl = document.getElementById('stat-zpos');
+        const statRadiusEl = document.getElementById('stat-radius');
+        const statIntensityEl = document.getElementById('stat-intensity');
+        const statErgyEl = document.getElementById('stat-ergy');
+        const statPzEl = document.getElementById('stat-pz');
+
+        function updateMetricsUI() {
+            statStepEl.textContent = steps;
+            statErgyEl.textContent = calcTotalErgy().toExponential(2);
+
+            const p = calcTotalMomentum();
+            statPzEl.textContent = p.z.toExponential(2);
+
+            const metrics = calcPulseMetrics();
+            statZposEl.textContent = metrics.zCenter.toFixed(1);
+            statRadiusEl.textContent = metrics.radius.toFixed(2);
+            statIntensityEl.textContent = metrics.maxIntensity.toFixed(2);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.code === 'Space') {
+                isPaused = !isPaused;
+            }
+            else if (e.key === 'r' || e.key === 'R') {
+                steps = 0;
+                initonepulse(20);
+                // initoneblockpulse();
+                drawGrid1();
+                drawGrid2();
+                updateMetricsUI();
+            }
+            else if (e.key === 's' || e.key === 'S') {
+                logic_step();
+                steps++;
+                updateMetricsUI();
+            }
+        });
+
+        function logic_pre() {
+            // drawvoxelcorners();
+            drawscenecorners();
+
+            initvectormeshes();
+
+            initonepulse(20);
+            // initrandvecs();
+            // initoneblockpulse();
+        }
+
+        function logic_post() {
+            console.log('sim complete');
+        }
+
+        // finished. steps === stepsmax. render stays on.
+        function run_post() {
+            controls.update();
+
+            requestAnimationFrame(run_post);
+            renderer.render(scene, camera);
+        }
+
+        const stepsuntilplot = 1;
+        // const stepsuntilplot = 8;
+        const stepsuntilrender = 1;
+        // const stepsuntilrender = stepsuntilplot;
+        const stepsuntilupdatemetrics = 10;
+
+        async function run() {
+            if (!isPaused) {
+                for (var i = 0; i < stepsuntilrender && steps < stepsmax; i++) {
+                    logic_step(); // can change stepsmax to terminate early
+                    steps++;
+                }
+
+                if (steps % stepsuntilupdatemetrics === 0) {
+                    updateMetricsUI();
+                }
+            }
+
+            // >= not just ===, because stepsuntilrender*ninteger might be > stepsmax
+            if (steps >= stepsmax) {
+                // render everything remaining
+                // avoids hiccup where renders plots then renders few more points.
+                renderer.render(scene, camera);
+                // give DOM short break to update page.
+                await new Promise(r => setTimeout(r, 0));
+                // turn on autorotate
+                controls.autoRotate = true;
+                controls.autoRotateSpeed = 0.1;
+                logic_post();
+                return run_post();
+            }
+
+            controls.update();
+            requestAnimationFrame(run);
+            renderer.render(scene, camera);
+
+            // clearscene();
+        }
+        logic_pre();
+        updateMetricsUI();
+        run();
+    </script>
+
+</body>
+
+</html>
